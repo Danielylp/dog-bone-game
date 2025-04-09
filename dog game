@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Dog Bone Collector</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #87CEEB;
+      font-family: Arial, sans-serif;
+    }
+    #game-container {
+      position: relative;
+      width: 100%;
+      height: 100vh;
+    }
+    #game-area {
+      background-color: #7CFC00;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      border: 4px solid #663300;
+      overflow: hidden;
+    }
+    #dog {
+      position: absolute;
+      width: 50px;
+      height: 30px;
+      background-color: #8B4513;
+      border-radius: 25px 25px 0 0;
+      transition: transform 0.1s;
+    }
+    #dog:after {
+      content: '';
+      position: absolute;
+      width: 20px;
+      height: 15px;
+      background-color: #A0522D;
+      border-radius: 10px;
+      right: -5px;
+      top: 0;
+    }
+    #dog:before {
+      content: '';
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      background-color: black;
+      border-radius: 50%;
+      left: 10px;
+      top: 5px;
+    }
+    .bone {
+      position: absolute;
+      width: 20px;
+      height: 10px;
+      background-color: #FFFFF0;
+      border-radius: 5px;
+    }
+    .bone:before, .bone:after {
+      content: '';
+      position: absolute;
+      width: 8px;
+      height: 14px;
+      background-color: #FFFFF0;
+      border-radius: 4px;
+    }
+    .bone:before {
+      left: -4px;
+      top: -2px;
+    }
+    .bone:after {
+      right: -4px;
+      top: -2px;
+    }
+    #score {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 24px;
+      color: white;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+    }
+    #timer {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 24px;
+      color: white;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+    }
+    #start-screen, #game-over {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background-color: rgba(0, 0, 0, 0.7);
+      color: white;
+      z-index: 10;
+    }
+    #game-over {
+      display: none;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 18px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      margin-top: 20px;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    .tail {
+      position: absolute;
+      width: 15px;
+      height: 8px;
+      background-color: #8B4513;
+      border-radius: 4px;
+      transform-origin: left center;
+      animation: wag 0.5s infinite alternate;
+    }
+    @keyframes wag {
+      0% { transform: rotate(-15deg); }
+      100% { transform: rotate(15deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <div id="game-area">
+      <div id="dog"></div>
+    </div>
+    <div id="score">Bones: 0</div>
+    <div id="timer">Time: 60</div>
+    
+    <div id="start-screen">
+      <h1>Dog Bone Collector</h1>
+      <p>Use arrow keys or WASD to move the dog and collect bones!</p>
+      <button id="start-button">Start Game</button>
+    </div>
+    
+    <div id="game-over">
+      <h1>Game Over!</h1>
+      <p id="final-score">You collected 0 bones!</p>
+      <button id="restart-button">Play Again</button>
+    </div>
+  </div>
+
+  <script>
+    // Wait for DOM to fully load
+    document.addEventListener('DOMContentLoaded', function() {
+      // Game configuration
+      const config = {
+        gameWidth: 600,
+        gameHeight: 400,
+        dogSpeed: 5,
+        boneCount: 5,
+        gameDuration: 60 // seconds
+      };
+      
+      // Game state
+      let gameState = {
+        score: 0,
+        timeRemaining: config.gameDuration,
+        isGameRunning: false,
+        keysPressed: {},
+        bones: [],
+        gameTimer: null
+      };
+      
+      // DOM Elements
+      const gameArea = document.getElementById('game-area');
+      const dog = document.getElementById('dog');
+      const scoreDisplay = document.getElementById('score');
+      const timerDisplay = document.getElementById('timer');
+      const startScreen = document.getElementById('start-screen');
+      const gameOverScreen = document.getElementById('game-over');
+      const startButton = document.getElementById('start-button');
+      const restartButton = document.getElementById('restart-button');
+      const finalScore = document.getElementById('final-score');
+      
+      // Set game area dimensions
+      gameArea.style.width = config.gameWidth + 'px';
+      gameArea.style.height = config.gameHeight + 'px';
+      
+      // Initialize dog position
+      let dogPos = {
+        x: config.gameWidth / 2 - 25,
+        y: config.gameHeight / 2 - 15,
+        width: 50,
+        height: 30,
+        direction: 'right'
+      };
+      
+      // Set initial dog position
+      updateDogPosition();
+      
+      // Add tail to dog
+      const tail = document.createElement('div');
+      tail.className = 'tail';
+      dog.appendChild(tail);
+      
+      // Position the tail based on dog direction
+      positionTail();
+      
+      // Event listeners
+      startButton.addEventListener('click', startGame);
+      restartButton.addEventListener('click', startGame);
+      
+      window.addEventListener('keydown', (e) => {
+        gameState.keysPressed[e.key] = true;
+        // Prevent scrolling when using arrow keys
+        if(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+          e.preventDefault();
+        }
+      });
+      
+      window.addEventListener('keyup', (e) => {
+        gameState.keysPressed[e.key] = false;
+      });
+      
+      // Game functions
+      function startGame() {
+        // Reset game state
+        gameState.score = 0;
+        gameState.timeRemaining = config.gameDuration;
+        gameState.isGameRunning = true;
+        gameState.keysPressed = {};
+        
+        // Clear existing bones
+        gameState.bones.forEach(bone => {
+          if (bone.element && bone.element.parentNode) {
+            bone.element.parentNode.removeChild(bone.element);
+          }
+        });
+        gameState.bones = [];
+        
+        // Reset displays
+        scoreDisplay.textContent = `Bones: ${gameState.score}`;
+        timerDisplay.textContent = `Time: ${gameState.timeRemaining}`;
+        
+        // Hide start/game over screens
+        startScreen.style.display = 'none';
+        gameOverScreen.style.display = 'none';
+        
+        // Reset dog position
+        dogPos = {
+          x: config.gameWidth / 2 - 25,
+          y: config.gameHeight / 2 - 15,
+          width: 50,
+          height: 30,
+          direction: 'right'
+        };
+        updateDogPosition();
+        
+        // Spawn initial bones
+        spawnBones();
+        
+        // Start game loop
+        if (gameState.gameTimer) clearInterval(gameState.gameTimer);
+        gameState.gameTimer = setInterval(updateTimer, 1000);
+        
+        requestAnimationFrame(gameLoop);
+      }
+      
+      function gameLoop() {
+        if (!gameState.isGameRunning) return;
+        
+        moveDog();
+        checkBoneCollisions();
+        
+        requestAnimationFrame(gameLoop);
+      }
+      
+      function moveDog() {
+        // Movement with arrow keys or WASD
+        if (gameState.keysPressed['ArrowUp'] || gameState.keysPressed['w'] || gameState.keysPressed['W']) {
+          dogPos.y = Math.max(0, dogPos.y - config.dogSpeed);
+        }
+        if (gameState.keysPressed['ArrowDown'] || gameState.keysPressed['s'] || gameState.keysPressed['S']) {
+          dogPos.y = Math.min(config.gameHeight - dogPos.height, dogPos.y + config.dogSpeed);
+        }
+        if (gameState.keysPressed['ArrowLeft'] || gameState.keysPressed['a'] || gameState.keysPressed['A']) {
+          dogPos.x = Math.max(0, dogPos.x - config.dogSpeed);
+          dogPos.direction = 'left';
+        }
+        if (gameState.keysPressed['ArrowRight'] || gameState.keysPressed['d'] || gameState.keysPressed['D']) {
+          dogPos.x = Math.min(config.gameWidth - dogPos.width, dogPos.x + config.dogSpeed);
+          dogPos.direction = 'right';
+        }
+        
+        updateDogPosition();
+      }
+      
+      function updateDogPosition() {
+        dog.style.left = dogPos.x + 'px';
+        dog.style.top = dogPos.y + 'px';
+        
+        // Update dog direction
+        if (dogPos.direction === 'left') {
+          dog.style.transform = 'scaleX(-1)';
+        } else {
+          dog.style.transform = 'scaleX(1)';
+        }
+        
+        positionTail();
+      }
+      
+      function positionTail() {
+        const tail = dog.querySelector('.tail');
+        if (tail) {
+          if (dogPos.direction === 'left') {
+            tail.style.right = '-10px';
+            tail.style.left = 'auto';
+            tail.style.bottom = '5px';
+          } else {
+            tail.style.left = '-10px';
+            tail.style.right = 'auto';
+            tail.style.bottom = '5px';
+          }
+        }
+      }
+      
+      function spawnBones() {
+        // Create new bones
+        for (let i = 0; i < config.boneCount; i++) {
+          createBone();
+        }
+      }
+      
+      function createBone() {
+        const boneElement = document.createElement('div');
+        boneElement.className = 'bone';
+        
+        const boneX = Math.random() * (config.gameWidth - 20);
+        const boneY = Math.random() * (config.gameHeight - 10);
+        
+        boneElement.style.left = boneX + 'px';
+        boneElement.style.top = boneY + 'px';
+        
+        gameArea.appendChild(boneElement);
+        
+        gameState.bones.push({
+          element: boneElement,
+          x: boneX,
+          y: boneY,
+          width: 20,
+          height: 10
+        });
+      }
+      
+      function checkBoneCollisions() {
+        for (let i = gameState.bones.length - 1; i >= 0; i--) {
+          const bone = gameState.bones[i];
+          
+          if (
+            dogPos.x < bone.x + bone.width &&
+            dogPos.x + dogPos.width > bone.x &&
+            dogPos.y < bone.y + bone.height &&
+            dogPos.y + dogPos.height > bone.y
+          ) {
+            // Collision detected
+            if (bone.element && bone.element.parentNode) {
+              bone.element.parentNode.removeChild(bone.element);
+            }
+            gameState.bones.splice(i, 1);
+            
+            // Update score
+            gameState.score++;
+            scoreDisplay.textContent = `Bones: ${gameState.score}`;
+            
+            // Create a new bone
+            createBone();
+          }
+        }
+      }
+      
+      function updateTimer() {
+        gameState.timeRemaining--;
+        timerDisplay.textContent = `Time: ${gameState.timeRemaining}`;
+        
+        if (gameState.timeRemaining <= 0) {
+          endGame();
+        }
+      }
+      
+      function endGame() {
+        gameState.isGameRunning = false;
+        clearInterval(gameState.gameTimer);
+        
+        // Display game over screen
+        gameOverScreen.style.display = 'flex';
+        finalScore.textContent = `You collected ${gameState.score} bones!`;
+      }
+      
+      // Handle window resize
+      function handleResize() {
+        // Maintain game area aspect ratio
+        const container = document.getElementById('game-container');
+        const containerWidth = container.offsetWidth;
+        const containerHeight = container.offsetHeight;
+        
+        const gameRatio = config.gameWidth / config.gameHeight;
+        const containerRatio = containerWidth / containerHeight;
+        
+        if (containerRatio > gameRatio) {
+          // Container is wider than needed
+          const height = Math.min(containerHeight, config.gameHeight);
+          const width = height * gameRatio;
+          gameArea.style.width = width + 'px';
+          gameArea.style.height = height + 'px';
+        } else {
+          // Container is taller than needed
+          const width = Math.min(containerWidth, config.gameWidth);
+          const height = width / gameRatio;
+          gameArea.style.width = width + 'px';
+          gameArea.style.height = height + 'px';
+        }
+      }
+      
+      window.addEventListener('resize', handleResize);
+      
+      // Initial resize
+      handleResize();
+    });
+  </script>
+</body>
+</html>
